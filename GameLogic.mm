@@ -16,9 +16,12 @@ uint64_t GetMatch(uint64_t matchGame) {
     return ReadPointer(matchGame + 0x90);
 }
 
-uint64_t GetLocalPlayer(uint64_t match) {
-    if (match == 0) return 0;
-    return ReadPointer(match + 0x58);
+uint64_t GetLocalPlayer(uint64_t matchGame) {
+    if (matchGame == 0) return 0;
+    uint64_t match = ReadPointer(matchGame + 0x90);
+    uint64_t lp = ReadPointer(match > 0 ? (match + 0x58) : (matchGame + 0x58));
+    if (lp == 0) lp = ReadPointer(matchGame + 0x58);
+    return lp;
 }
 
 uint64_t GetCameraMain(uint64_t matchGame) {
@@ -39,7 +42,8 @@ void GetViewMatrix(uint64_t cameraMain, float *matrixOut) {
 
 uint64_t GetPawnObject(uint64_t player) {
     if (player == 0) return 0;
-    return ReadPointer(player + 0x68);
+    uint64_t pawn = ReadPointer(player + 0x68);
+    return (pawn != 0) ? pawn : player;
 }
 
 struct TMatrix {
@@ -56,14 +60,23 @@ Vector3 GetNodePosition(uint64_t pawn, uint32_t nodeOffset) {
     if (bodyPart == 0) return result;
 
     uint64_t transObj2 = ReadPointer(bodyPart + 0x10);
-    if (transObj2 == 0) return result;
+    if (transObj2 == 0) {
+        ReadMemory(bodyPart + 0x90, &result, sizeof(Vector3));
+        return result;
+    }
 
     uint64_t transObj = ReadPointer(transObj2 + 0x10);
-    if (transObj == 0) return result;
+    if (transObj == 0) {
+        ReadMemory(transObj2 + 0x90, &result, sizeof(Vector3));
+        return result;
+    }
 
     uint64_t matrix = ReadPointer(transObj + 0x38);
     uint64_t index = ReadPointer(transObj + 0x40);
-    if (matrix == 0) return result;
+    if (matrix == 0) {
+        ReadMemory(transObj + 0x90, &result, sizeof(Vector3));
+        return result;
+    }
 
     uint64_t matrix_list = ReadPointer(matrix + 0x18);
     uint64_t matrix_indices = ReadPointer(matrix + 0x20);
@@ -78,7 +91,8 @@ Vector3 GetNodePosition(uint64_t pawn, uint32_t nodeOffset) {
     int transformIndex = 0;
     ReadMemory(matrix_indices + sizeof(int) * index, &transformIndex, sizeof(transformIndex));
 
-    while (transformIndex >= 0 && transformIndex < 1000) {
+    int depth = 0;
+    while (transformIndex >= 0 && depth < 100) {
         TMatrix tMatrix;
         ReadMemory(matrix_list + sizeof(TMatrix) * transformIndex, &tMatrix, sizeof(TMatrix));
 
@@ -108,6 +122,7 @@ Vector3 GetNodePosition(uint64_t pawn, uint32_t nodeOffset) {
         ReadMemory(matrix_indices + sizeof(int) * transformIndex, &nextIndex, sizeof(nextIndex));
         if (nextIndex == transformIndex) break;
         transformIndex = nextIndex;
+        depth++;
     }
 
     return result;
@@ -125,17 +140,24 @@ std::vector<uint64_t> GetEnemyList(uint64_t matchGame) {
     if (matchGame == 0) return list;
 
     uint64_t playerDict = ReadPointer(matchGame + 0x60);
+    if (playerDict == 0) playerDict = ReadPointer(matchGame + 0x58);
     if (playerDict == 0) return list;
 
     uint64_t playerArray = ReadPointer(playerDict + 0x18);
+    if (playerArray == 0) playerArray = playerDict;
     if (playerArray == 0) return list;
 
     int32_t count = 0;
     ReadMemory(playerArray + 0x18, &count, sizeof(count));
+    if (count <= 0 || count > 100) {
+        ReadMemory(playerArray + 0x10, &count, sizeof(count));
+    }
 
     if (count <= 0 || count > 100) return list;
 
-    uint64_t itemsPtr = playerArray + 0x20;
+    uint64_t itemsPtr = ReadPointer(playerArray + 0x10);
+    if (itemsPtr == 0) itemsPtr = playerArray + 0x20;
+
     for (int i = 0; i < count; i++) {
         uint64_t player = ReadPointer(itemsPtr + (i * 8));
         if (player != 0) {
