@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.plist">
 <plist version="1.0">
 <dict>
     <key>get-task-allow</key>
@@ -9,6 +9,12 @@
     <key>com.apple.system-task-ports</key>
     <true/>
     <key>com.apple.springboard.accessibility-window-hosting</key>
+    <true/>
+    <key>com.apple.private.security.no-sandbox</key>
+    <true/>
+    <key>platform-application</key>
+    <true/>
+    <key>com.apple.private.kernel.get-kext-info</key>
     <true/>
 </dict>
 </plist>

@@ -15,11 +15,22 @@ extern "C" {
 
 static mach_port_t g_gameTask = 0;
 
+static bool IsTargetProcess(const char *name) {
+    if (!name) return false;
+    if (strcasestr(name, "freefireth")) return true;
+    if (strcasestr(name, "freefiremax")) return true;
+    if (strcasestr(name, "freefire")) return true;
+    if (strcasestr(name, "garena")) return true;
+    if (strcasestr(name, "FFExt")) return true;
+    if (strcasecmp(name, "ff") == 0) return true;
+    return false;
+}
+
 pid_t GetGamePID(void) {
-    // 1. Try proc_listpids & proc_pidpath via C declarations
+    // 1. Try proc_listpids & proc_pidpath
     int numPids = proc_listpids(PROC_ALL_PIDS, 0, NULL, 0);
     if (numPids > 0) {
-        pid_t pids[1024];
+        pid_t pids[2048];
         int bytesReturned = proc_listpids(PROC_ALL_PIDS, 0, pids, sizeof(pids));
         int count = bytesReturned / sizeof(pid_t);
 
@@ -29,9 +40,7 @@ pid_t GetGamePID(void) {
 
             char pathBuffer[PROC_PIDPATHINFO_MAXSIZE];
             if (proc_pidpath(pid, pathBuffer, sizeof(pathBuffer)) > 0) {
-                if (strcasestr(pathBuffer, "freefire") || 
-                    strcasestr(pathBuffer, "ff") || 
-                    strcasestr(pathBuffer, "garena")) {
+                if (IsTargetProcess(pathBuffer)) {
                     return pid;
                 }
             }
@@ -49,7 +58,7 @@ pid_t GetGamePID(void) {
                 int count = (int)(size / sizeof(struct kinfo_proc));
                 for (int i = 0; i < count; i++) {
                     char *name = procs[i].kp_proc.p_comm;
-                    if (strcasestr(name, "freefire") || strcasestr(name, "ff") || strcasestr(name, "garena")) {
+                    if (IsTargetProcess(name)) {
                         pid_t foundPID = procs[i].kp_proc.p_pid;
                         free(procs);
                         return foundPID;
@@ -66,11 +75,9 @@ pid_t GetGamePID(void) {
 uint64_t GetGameModuleBase(pid_t pid) {
     if (pid <= 0) return 0;
     
-    if (g_gameTask == 0) {
-        task_for_pid(mach_task_self(), pid, &g_gameTask);
-    }
-    
-    if (g_gameTask == 0) return 0;
+    g_gameTask = 0;
+    kern_return_t kr_task = task_for_pid(mach_task_self(), pid, &g_gameTask);
+    if (kr_task != KERN_SUCCESS || g_gameTask == 0) return 0;
 
     vm_address_t address = 0;
     vm_size_t size = 0;
@@ -90,7 +97,7 @@ uint64_t GetGameModuleBase(pid_t pid) {
         uint32_t header[2];
         vm_size_t bytesRead = 0;
         if (vm_read_overwrite(g_gameTask, address, sizeof(header), (vm_address_t)header, &bytesRead) == KERN_SUCCESS) {
-            if (header[0] == 0xFEEDFACF || header[0] == 0xFEEDFACE) { // MH_MAGIC_64 or MH_MAGIC
+            if (header[0] == 0xFEEDFACF || header[0] == 0xFEEDFACE) { // MH_MAGIC_64 / MH_MAGIC
                 return (uint64_t)address;
             }
         }
