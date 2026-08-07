@@ -11,33 +11,19 @@ void SetGameFacadeOffset(uint64_t offset) {
 uint64_t GetMatchGame(uint64_t base) {
     if (base == 0) return 0;
     
-    // 1. Try override offset first
     uint64_t typeInfo = ReadPointer(base + g_overrideOffset);
+    if (typeInfo == 0) typeInfo = ReadPointer(base + 0xC012848);
+
     if (typeInfo > 0) {
         uint64_t staticFields = ReadPointer(typeInfo + 0xB8);
         if (staticFields > 0) {
-            uint64_t matchGame = ReadPointer(staticFields + 0x0);
+            // CurrentMatchGame is at staticFields + 0x8
+            uint64_t matchGame = ReadPointer(staticFields + 0x8);
             if (matchGame > 0) return matchGame;
-        }
-    }
-
-    // 2. Auto-Scan Candidates if override failed
-    uint64_t candidates[] = {
-        0xC012848, 0xC012840, 0xC012850, 0xC012800, 0xC012880,
-        0xC012700, 0xC012900, 0xC010000, 0xC015000, 0xBF80000
-    };
-
-    for (uint64_t cand : candidates) {
-        uint64_t tInfo = ReadPointer(base + cand);
-        if (tInfo > 0 && (tInfo % 8 == 0)) {
-            uint64_t sFields = ReadPointer(tInfo + 0xB8);
-            if (sFields > 0 && (sFields % 8 == 0)) {
-                uint64_t mg = ReadPointer(sFields + 0x0);
-                if (mg > 0x100000000ULL && (mg % 8 == 0)) {
-                    g_overrideOffset = cand;
-                    return mg;
-                }
-            }
+            
+            // Fallback to CurrentGame at staticFields + 0x0 if 0x8 is 0
+            matchGame = ReadPointer(staticFields + 0x0);
+            if (matchGame > 0) return matchGame;
         }
     }
 
