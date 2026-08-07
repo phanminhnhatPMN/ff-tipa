@@ -1,35 +1,55 @@
 #include "Memory.h"
 #include <strings.h>
+#include <libproc.h>
 
 static mach_port_t g_gameTask = 0;
 
 pid_t GetGamePID(void) {
-    int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0};
-    size_t size;
+    // 1. Try proc_listpids & proc_pidpath
+    int numPids = proc_listpids(PROC_ALL_PIDS, 0, NULL, 0);
+    if (numPids > 0) {
+        pid_t pids[1024];
+        int bytesReturned = proc_listpids(PROC_ALL_PIDS, 0, pids, sizeof(pids));
+        int count = bytesReturned / sizeof(pid_t);
 
-    if (sysctl(mib, 4, NULL, &size, NULL, 0) < 0) return -1;
+        for (int i = 0; i < count; i++) {
+            pid_t pid = pids[i];
+            if (pid <= 0) continue;
 
-    struct kinfo_proc *procs = (struct kinfo_proc *)malloc(size);
-    if (!procs) return -1;
-
-    if (sysctl(mib, 4, procs, &size, NULL, 0) < 0) {
-        free(procs);
-        return -1;
-    }
-
-    int count = (int)(size / sizeof(struct kinfo_proc));
-    pid_t foundPID = -1;
-
-    for (int i = 0; i < count; i++) {
-        char *name = procs[i].kp_proc.p_comm;
-        if (strcasestr(name, "freefire") || strcasestr(name, "ff")) {
-            foundPID = procs[i].kp_proc.p_pid;
-            break;
+            char pathBuffer[PROC_PIDPATHINFO_MAXSIZE];
+            if (proc_pidpath(pid, pathBuffer, sizeof(pathBuffer)) > 0) {
+                if (strcasestr(pathBuffer, "freefire") || 
+                    strcasestr(pathBuffer, "ff") || 
+                    strcasestr(pathBuffer, "garena")) {
+                    return pid;
+                }
+            }
         }
     }
 
-    free(procs);
-    return foundPID;
+    // 2. Fallback to sysctl KERN_PROC_ALL
+    int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0};
+    size_t size;
+
+    if (sysctl(mib, 4, NULL, &size, NULL, 0) == 0) {
+        struct kinfo_proc *procs = (struct kinfo_proc *)malloc(size);
+        if (procs) {
+            if (sysctl(mib, 4, procs, &size, NULL, 0) == 0) {
+                int count = (int)(size / sizeof(struct kinfo_proc));
+                for (int i = 0; i < count; i++) {
+                    char *name = procs[i].kp_proc.p_comm;
+                    if (strcasestr(name, "freefire") || strcasestr(name, "ff") || strcasestr(name, "garena")) {
+                        pid_t foundPID = procs[i].kp_proc.p_pid;
+                        free(procs);
+                        return foundPID;
+                    }
+                }
+            }
+            free(procs);
+        }
+    }
+
+    return -1;
 }
 
 uint64_t GetGameModuleBase(pid_t pid) {
@@ -59,8 +79,8 @@ uint64_t GetGameModuleBase(pid_t pid) {
         uint32_t header[2];
         vm_size_t bytesRead = 0;
         if (vm_read_overwrite(g_gameTask, address, sizeof(header), (vm_address_t)header, &bytesRead) == KERN_SUCCESS) {
-            if (header[0] == MH_MAGIC_64) {
-                return address;
+            if (header[0] == 0xFEEDFACF || header[0] == 0xFEEDFACE) { // MH_MAGIC_64 or MH_MAGIC
+                return (uint64_t)address;
             }
         }
 

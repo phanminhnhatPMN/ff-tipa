@@ -262,11 +262,11 @@ static float g_aimDistance = 200.0f;
 }
 
 - (void)onFrameUpdate {
-    if (m_pid <= 0) {
-        m_pid = GetGamePID();
-    }
-    if (m_pid > 0 && m_base == 0) {
+    m_pid = GetGamePID();
+    if (m_pid > 0) {
         m_base = GetGameModuleBase(m_pid);
+    } else {
+        m_base = 0;
     }
 
     if (m_logLabel) {
@@ -301,6 +301,56 @@ static float g_aimDistance = 200.0f;
         fovLayer.fillColor = [UIColor clearColor].CGColor;
         fovLayer.lineWidth = 1.5;
         [self.espLayers addObject:fovLayer];
+    }
+
+    if (m_pid > 0 && m_base > 0) {
+        uint64_t matchGame = GetMatchGame(m_base);
+        if (matchGame > 0) {
+            uint64_t localPlayer = GetLocalPlayer(matchGame);
+            if (localPlayer > 0) {
+                uint64_t myPawn = GetPawnObject(localPlayer);
+                if (myPawn > 0) {
+                    std::vector<uint64_t> enemies = GetEnemyList(matchGame);
+                    for (uint64_t enemy : enemies) {
+                        if (enemy == 0 || enemy == myPawn) continue;
+                        if (GetIsDead(enemy)) continue;
+
+                        Vector3 headPos = GetNodePosition(enemy, 0x630);
+                        Vector3 hipPos = GetNodePosition(enemy, 0x638);
+                        if (headPos.x == 0 && headPos.y == 0) continue;
+
+                        Vector3 headScreen = WorldToScreen(headPos);
+                        Vector3 hipScreen = WorldToScreen(hipPos);
+
+                        float boxHeight = std::abs(hipScreen.y - headScreen.y) * 2.2f;
+                        if (boxHeight < 15) boxHeight = 50;
+                        float boxWidth = boxHeight * 0.55f;
+                        float x = headScreen.x - (boxWidth / 2.0f);
+                        float y = headScreen.y - (boxHeight * 0.15f);
+
+                        if (g_isBox) {
+                            CAShapeLayer *boxLayer = [CAShapeLayer layer];
+                            UIBezierPath *boxPath = [UIBezierPath bezierPathWithRect:CGRectMake(x, y, boxWidth, boxHeight)];
+                            boxLayer.path = boxPath.CGPath;
+                            boxLayer.strokeColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.8 alpha:1.0].CGColor;
+                            boxLayer.fillColor = [UIColor clearColor].CGColor;
+                            boxLayer.lineWidth = 1.5;
+                            [self.espLayers addObject:boxLayer];
+                        }
+
+                        if (g_isName) {
+                            CATextLayer *nameLayer = [CATextLayer layer];
+                            nameLayer.string = @"[PMNDEV ENEMY]";
+                            nameLayer.fontSize = 10;
+                            nameLayer.frame = CGRectMake(x - 20, y - 16, boxWidth + 40, 14);
+                            nameLayer.alignmentMode = kCAAlignmentCenter;
+                            nameLayer.foregroundColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.8 alpha:1.0].CGColor;
+                            [self.espLayers addObject:nameLayer];
+                        }
+                    }
+                }
+            }
+        }
     }
 
     for (CALayer *layer in self.espLayers) {
