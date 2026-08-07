@@ -7,8 +7,9 @@ workflows:
       vars:
         THEOS: $CM_BUILD_DIR/theos
     scripts:
-      - name: Setup Theos Toolchain
+      - name: Setup Theos Toolchain & ldid
         script: |
+          brew install ldid || true
           git clone --recursive https://github.com/theos/theos.git $THEOS
           curl -LO https://github.com/theos/sdks/archive/refs/heads/master.zip
           unzip -q master.zip
