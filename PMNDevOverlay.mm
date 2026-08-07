@@ -10,6 +10,8 @@ static bool g_isAimbot = false;
 static float g_aimFov = 160.0f;
 static float g_aimDistance = 200.0f;
 
+static uint64_t g_currentOffsetChoice = 0xC012848;
+
 @interface PMNDevOverlayView ()
 @property (nonatomic, strong) CADisplayLink *displayLink;
 @property (nonatomic, strong) NSMutableArray<CALayer *> *espLayers;
@@ -25,6 +27,7 @@ static float g_aimDistance = 200.0f;
     UIView *m_tabLogs;
 
     UILabel *m_logLabel;
+    UILabel *m_offsetLabel;
     
     pid_t m_pid;
     uint64_t m_base;
@@ -109,7 +112,7 @@ static float g_aimDistance = 200.0f;
     [header addSubview:title];
 
     UILabel *sub = [[UILabel alloc] initWithFrame:CGRectMake(330, 16, 170, 20)];
-    sub.text = @"v1.130.1 | By PMNDev";
+    sub.text = @"v1.130.1 | Live Tuner";
     sub.textColor = [UIColor colorWithWhite:0.7 alpha:1.0];
     sub.font = [UIFont systemFontOfSize:11];
     [header addSubview:sub];
@@ -152,11 +155,34 @@ static float g_aimDistance = 200.0f;
     m_tabESP.backgroundColor = [UIColor clearColor];
     [m_menuContainer addSubview:m_tabESP];
 
-    [self addSwitchRow:m_tabESP title:@"Box ESP" y:15 val:g_isBox sel:@selector(onToggleBox:)];
-    [self addSwitchRow:m_tabESP title:@"Skeleton / Bone" y:60 val:g_isBone sel:@selector(onToggleBone:)];
-    [self addSwitchRow:m_tabESP title:@"Health Bar" y:105 val:g_isHealth sel:@selector(onToggleHealth:)];
-    [self addSwitchRow:m_tabESP title:@"Player Name" y:150 val:g_isName sel:@selector(onToggleName:)];
-    [self addSwitchRow:m_tabESP title:@"Distance Meter" y:195 val:g_isDistance sel:@selector(onToggleDistance:)];
+    [self addSwitchRow:m_tabESP title:@"Box ESP" y:10 val:g_isBox sel:@selector(onToggleBox:)];
+    [self addSwitchRow:m_tabESP title:@"Skeleton / Bone" y:48 val:g_isBone sel:@selector(onToggleBone:)];
+    [self addSwitchRow:m_tabESP title:@"Health Bar" y:86 val:g_isHealth sel:@selector(onToggleHealth:)];
+    [self addSwitchRow:m_tabESP title:@"Player Name" y:124 val:g_isName sel:@selector(onToggleName:)];
+    [self addSwitchRow:m_tabESP title:@"Distance Meter" y:162 val:g_isDistance sel:@selector(onToggleDistance:)];
+
+    // Live Offset Switcher Buttons (No Rebuild Needed)
+    UILabel *tuneLbl = [[UILabel alloc] initWithFrame:CGRectMake(20, 205, 380, 20)];
+    tuneLbl.text = @"⚡ LIVE OFFSET TUNER (Click to switch instantly):";
+    tuneLbl.textColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.8 alpha:1.0];
+    tuneLbl.font = [UIFont boldSystemFontOfSize:12];
+    [m_tabESP addSubview:tuneLbl];
+
+    NSArray *offsets = @[@"0xC012848", @"0xC012840", @"0xC012850", @"0xC012800"];
+    for (int i = 0; i < offsets.count; i++) {
+        UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
+        btn.frame = CGRectMake(20 + (i * 95), 235, 90, 36);
+        btn.backgroundColor = [UIColor colorWithRed:0.2 green:0.2 blue:0.35 alpha:1.0];
+        [btn setTitle:offsets[i] forState:UIControlStateNormal];
+        [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        btn.titleLabel.font = [UIFont boldSystemFontOfSize:11];
+        btn.layer.cornerRadius = 8;
+        btn.layer.borderColor = [UIColor colorWithRed:0.0 green:0.8 blue:0.8 alpha:0.6].CGColor;
+        btn.layer.borderWidth = 1.0;
+        btn.tag = i;
+        [btn addTarget:self action:@selector(onOffsetSelect:) forControlEvents:UIControlEventTouchUpInside];
+        [m_tabESP addSubview:btn];
+    }
 
     // --- TAB 2: AIMBOT ---
     m_tabAim = [[UIView alloc] initWithFrame:CGRectMake(146, 62, 420, 284)];
@@ -208,6 +234,14 @@ static float g_aimDistance = 200.0f;
 
     CGRect screen = [UIScreen mainScreen].bounds;
     m_menuContainer.center = CGPointMake(screen.size.width / 2.0, screen.size.height / 2.0);
+}
+
+- (void)onOffsetSelect:(UIButton *)btn {
+    uint64_t choiceList[] = {0xC012848, 0xC012840, 0xC012850, 0xC012800};
+    if (btn.tag >= 0 && btn.tag < 4) {
+        g_currentOffsetChoice = choiceList[btn.tag];
+        SetGameFacadeOffset(g_currentOffsetChoice);
+    }
 }
 
 - (void)onTabClicked:(UIButton *)btn {
@@ -281,13 +315,14 @@ static float g_aimDistance = 200.0f;
             @"Status: %@\n"
             @"Process PID: %d\n"
             @"Module Base: 0x%llX\n"
+            @"GameFacade Offset: 0x%llX\n"
             @"MatchGame: 0x%llX | Camera: 0x%llX\n"
             @"Enemies Found: %lu\n\n"
             @"=== ACTIVE ESP FEATURES ===\n"
             @"Box: %d | Bone: %d | Health: %d\n"
             @"Name: %d | Dist: %d | Aimbot: %d\n"
             @"Aim FOV: %.0f | Bone Offset: 0x630",
-            statusStr, m_pid, m_base, matchGame, cameraMain, enemies.size(),
+            statusStr, m_pid, m_base, g_currentOffsetChoice, matchGame, cameraMain, enemies.size(),
             g_isBox, g_isBone, g_isHealth,
             g_isName, g_isDistance, g_isAimbot, g_aimFov];
     }

@@ -2,13 +2,46 @@
 #include "Memory.h"
 #import <UIKit/UIKit.h>
 
+static uint64_t g_overrideOffset = 0xC012848;
+
+void SetGameFacadeOffset(uint64_t offset) {
+    g_overrideOffset = offset;
+}
+
 uint64_t GetMatchGame(uint64_t base) {
     if (base == 0) return 0;
-    uint64_t facadeTypeInfo = ReadPointer(base + 0xC012848);
-    if (facadeTypeInfo == 0) return 0;
-    uint64_t facadeStatic = ReadPointer(facadeTypeInfo + 0xB8);
-    if (facadeStatic == 0) return 0;
-    return ReadPointer(facadeStatic + 0x0);
+    
+    // 1. Try override offset first
+    uint64_t typeInfo = ReadPointer(base + g_overrideOffset);
+    if (typeInfo > 0) {
+        uint64_t staticFields = ReadPointer(typeInfo + 0xB8);
+        if (staticFields > 0) {
+            uint64_t matchGame = ReadPointer(staticFields + 0x0);
+            if (matchGame > 0) return matchGame;
+        }
+    }
+
+    // 2. Auto-Scan Candidates if override failed
+    uint64_t candidates[] = {
+        0xC012848, 0xC012840, 0xC012850, 0xC012800, 0xC012880,
+        0xC012700, 0xC012900, 0xC010000, 0xC015000, 0xBF80000
+    };
+
+    for (uint64_t cand : candidates) {
+        uint64_t tInfo = ReadPointer(base + cand);
+        if (tInfo > 0 && (tInfo % 8 == 0)) {
+            uint64_t sFields = ReadPointer(tInfo + 0xB8);
+            if (sFields > 0 && (sFields % 8 == 0)) {
+                uint64_t mg = ReadPointer(sFields + 0x0);
+                if (mg > 0x100000000ULL && (mg % 8 == 0)) {
+                    g_overrideOffset = cand;
+                    return mg;
+                }
+            }
+        }
+    }
+
+    return 0;
 }
 
 uint64_t GetMatch(uint64_t matchGame) {
@@ -27,6 +60,7 @@ uint64_t GetLocalPlayer(uint64_t matchGame) {
 uint64_t GetCameraMain(uint64_t matchGame) {
     if (matchGame == 0) return 0;
     uint64_t cameraManager = ReadPointer(matchGame + 0xD8);
+    if (cameraManager == 0) cameraManager = ReadPointer(matchGame + 0xD0);
     if (cameraManager == 0) return 0;
     return ReadPointer(cameraManager + 0x18);
 }
@@ -34,7 +68,7 @@ uint64_t GetCameraMain(uint64_t matchGame) {
 void GetViewMatrix(uint64_t cameraMain, float *matrixOut) {
     if (cameraMain == 0 || matrixOut == NULL) return;
     uint64_t v1 = ReadPointer(cameraMain + 0x10);
-    if (v1 == 0) return;
+    if (v1 == 0) v1 = cameraMain;
     for (int i = 0; i < 16; i++) {
         ReadMemory(v1 + 0xD8 + (i * 0x4), &matrixOut[i], sizeof(float));
     }

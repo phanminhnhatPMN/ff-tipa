@@ -24,9 +24,10 @@ struct Quaternion {
 
 #define OFFSET_GAMEFACADE 0xC012848
 
+void SetGameFacadeOffset(uint64_t offset);
 uint64_t GetMatchGame(uint64_t base);
 uint64_t GetMatch(uint64_t matchGame);
-uint64_t GetLocalPlayer(uint64_t match);
+uint64_t GetLocalPlayer(uint64_t matchGame);
 uint64_t GetCameraMain(uint64_t matchGame);
 void GetViewMatrix(uint64_t cameraMain, float *matrixOut);
 uint64_t GetPawnObject(uint64_t player);
