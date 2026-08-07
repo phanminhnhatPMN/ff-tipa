@@ -306,10 +306,19 @@ static float g_aimDistance = 200.0f;
     if (m_pid > 0 && m_base > 0) {
         uint64_t matchGame = GetMatchGame(m_base);
         if (matchGame > 0) {
-            uint64_t localPlayer = GetLocalPlayer(matchGame);
+            uint64_t cameraMain = GetCameraMain(matchGame);
+            float viewMatrix[16];
+            GetViewMatrix(cameraMain, viewMatrix);
+
+            uint64_t match = GetMatch(matchGame);
+            uint64_t localPlayer = GetLocalPlayer(match > 0 ? match : matchGame);
             if (localPlayer > 0) {
                 uint64_t myPawn = GetPawnObject(localPlayer);
                 if (myPawn > 0) {
+                    CGRect bounds = [UIScreen mainScreen].bounds;
+                    float sW = bounds.size.width;
+                    float sH = bounds.size.height;
+
                     std::vector<uint64_t> enemies = GetEnemyList(matchGame);
                     for (uint64_t enemy : enemies) {
                         if (enemy == 0 || enemy == myPawn) continue;
@@ -317,10 +326,12 @@ static float g_aimDistance = 200.0f;
 
                         Vector3 headPos = GetNodePosition(enemy, 0x630);
                         Vector3 hipPos = GetNodePosition(enemy, 0x638);
-                        if (headPos.x == 0 && headPos.y == 0) continue;
+                        if (headPos.x == 0 && headPos.y == 0 && headPos.z == 0) continue;
 
-                        Vector3 headScreen = WorldToScreen(headPos);
-                        Vector3 hipScreen = WorldToScreen(hipPos);
+                        Vector3 headScreen = WorldToScreen(headPos, viewMatrix, sW, sH);
+                        Vector3 hipScreen = WorldToScreen(hipPos, viewMatrix, sW, sH);
+
+                        if (headScreen.z <= 0.1f) continue;
 
                         float boxHeight = std::abs(hipScreen.y - headScreen.y) * 2.2f;
                         if (boxHeight < 15) boxHeight = 50;

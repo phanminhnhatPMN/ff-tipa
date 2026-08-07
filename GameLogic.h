@@ -22,15 +22,17 @@ struct Quaternion {
     float x, y, z, w;
 };
 
-// Offsets for Free Fire 1.130.1
 #define OFFSET_GAMEFACADE 0xC012848
 
 uint64_t GetMatchGame(uint64_t base);
-uint64_t GetLocalPlayer(uint64_t matchGame);
+uint64_t GetMatch(uint64_t matchGame);
+uint64_t GetLocalPlayer(uint64_t match);
+uint64_t GetCameraMain(uint64_t matchGame);
+void GetViewMatrix(uint64_t cameraMain, float *matrixOut);
 uint64_t GetPawnObject(uint64_t player);
 Vector3 GetNodePosition(uint64_t pawn, uint32_t nodeOffset);
 bool GetIsDead(uint64_t player);
 std::vector<uint64_t> GetEnemyList(uint64_t matchGame);
-Vector3 WorldToScreen(Vector3 worldPos);
+Vector3 WorldToScreen(Vector3 obj, float *matrix, float screenWidth, float screenHeight);
 
 #endif

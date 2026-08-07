@@ -4,16 +4,37 @@
 
 uint64_t GetMatchGame(uint64_t base) {
     if (base == 0) return 0;
-    uint64_t facadeStatic = ReadPointer(base + OFFSET_GAMEFACADE);
+    uint64_t facadeTypeInfo = ReadPointer(base + 0xC012848);
+    if (facadeTypeInfo == 0) return 0;
+    uint64_t facadeStatic = ReadPointer(facadeTypeInfo + 0xB8);
     if (facadeStatic == 0) return 0;
-    uint64_t facadeClass = ReadPointer(facadeStatic + 0x5C);
-    if (facadeClass == 0) return 0;
-    return ReadPointer(facadeClass + 0x0);
+    return ReadPointer(facadeStatic + 0x0);
 }
 
-uint64_t GetLocalPlayer(uint64_t matchGame) {
+uint64_t GetMatch(uint64_t matchGame) {
     if (matchGame == 0) return 0;
-    return ReadPointer(matchGame + 0x58);
+    return ReadPointer(matchGame + 0x90);
+}
+
+uint64_t GetLocalPlayer(uint64_t match) {
+    if (match == 0) return 0;
+    return ReadPointer(match + 0x58);
+}
+
+uint64_t GetCameraMain(uint64_t matchGame) {
+    if (matchGame == 0) return 0;
+    uint64_t cameraManager = ReadPointer(matchGame + 0xD8);
+    if (cameraManager == 0) return 0;
+    return ReadPointer(cameraManager + 0x18);
+}
+
+void GetViewMatrix(uint64_t cameraMain, float *matrixOut) {
+    if (cameraMain == 0 || matrixOut == NULL) return;
+    uint64_t v1 = ReadPointer(cameraMain + 0x10);
+    if (v1 == 0) return;
+    for (int i = 0; i < 16; i++) {
+        ReadMemory(v1 + 0xD8 + (i * 0x4), &matrixOut[i], sizeof(float));
+    }
 }
 
 uint64_t GetPawnObject(uint64_t player) {
@@ -21,18 +42,75 @@ uint64_t GetPawnObject(uint64_t player) {
     return ReadPointer(player + 0x68);
 }
 
+struct TMatrix {
+    struct { float x, y, z, w; } position;
+    struct { float x, y, z, w; } rotation;
+    struct { float x, y, z, w; } scale;
+};
+
 Vector3 GetNodePosition(uint64_t pawn, uint32_t nodeOffset) {
-    Vector3 pos(0, 0, 0);
-    if (pawn == 0 || nodeOffset == 0) return pos;
+    Vector3 result(0, 0, 0);
+    if (pawn == 0 || nodeOffset == 0) return result;
 
-    uint64_t nodePtr = ReadPointer(pawn + nodeOffset);
-    if (nodePtr == 0) return pos;
+    uint64_t bodyPart = ReadPointer(pawn + nodeOffset);
+    if (bodyPart == 0) return result;
 
-    uint64_t transformPtr = ReadPointer(nodePtr + 0x10);
-    if (transformPtr == 0) return pos;
+    uint64_t transObj2 = ReadPointer(bodyPart + 0x10);
+    if (transObj2 == 0) return result;
 
-    ReadMemory(transformPtr + 0x90, &pos, sizeof(Vector3));
-    return pos;
+    uint64_t transObj = ReadPointer(transObj2 + 0x10);
+    if (transObj == 0) return result;
+
+    uint64_t matrix = ReadPointer(transObj + 0x38);
+    uint64_t index = ReadPointer(transObj + 0x40);
+    if (matrix == 0) return result;
+
+    uint64_t matrix_list = ReadPointer(matrix + 0x18);
+    uint64_t matrix_indices = ReadPointer(matrix + 0x20);
+    if (matrix_list == 0 || matrix_indices == 0) return result;
+
+    TMatrix initMatrix;
+    ReadMemory(matrix_list + sizeof(TMatrix) * index, &initMatrix, sizeof(TMatrix));
+    result.x = initMatrix.position.x;
+    result.y = initMatrix.position.y;
+    result.z = initMatrix.position.z;
+
+    int transformIndex = 0;
+    ReadMemory(matrix_indices + sizeof(int) * index, &transformIndex, sizeof(transformIndex));
+
+    while (transformIndex >= 0 && transformIndex < 1000) {
+        TMatrix tMatrix;
+        ReadMemory(matrix_list + sizeof(TMatrix) * transformIndex, &tMatrix, sizeof(TMatrix));
+
+        float rotX = tMatrix.rotation.x;
+        float rotY = tMatrix.rotation.y;
+        float rotZ = tMatrix.rotation.z;
+        float rotW = tMatrix.rotation.w;
+
+        float scaleX = result.x * tMatrix.scale.x;
+        float scaleY = result.y * tMatrix.scale.y;
+        float scaleZ = result.z * tMatrix.scale.z;
+
+        result.x = tMatrix.position.x + scaleX +
+                    (scaleX * ((rotY * rotY * -2.0f) - (rotZ * rotZ * 2.0f))) +
+                    (scaleY * ((rotW * rotZ * -2.0f) - (rotY * rotX * -2.0f))) +
+                    (scaleZ * ((rotZ * rotX * 2.0f) - (rotW * rotY * -2.0f)));
+        result.y = tMatrix.position.y + scaleY +
+                    (scaleX * ((rotX * rotY * 2.0f) - (rotW * rotZ * -2.0f))) +
+                    (scaleY * ((rotZ * rotZ * -2.0f) - (rotX * rotX * 2.0f))) +
+                    (scaleZ * ((rotW * rotX * -2.0f) - (rotZ * rotY * -2.0f)));
+        result.z = tMatrix.position.z + scaleZ +
+                    (scaleX * ((rotW * rotY * -2.0f) - (rotX * rotZ * -2.0f))) +
+                    (scaleY * ((rotY * rotZ * 2.0f) - (rotW * rotX * -2.0f))) +
+                    (scaleZ * ((rotX * rotX * -2.0f) - (rotY * rotY * 2.0f)));
+
+        int nextIndex = -1;
+        ReadMemory(matrix_indices + sizeof(int) * transformIndex, &nextIndex, sizeof(nextIndex));
+        if (nextIndex == transformIndex) break;
+        transformIndex = nextIndex;
+    }
+
+    return result;
 }
 
 bool GetIsDead(uint64_t player) {
@@ -68,13 +146,18 @@ std::vector<uint64_t> GetEnemyList(uint64_t matchGame) {
     return list;
 }
 
-Vector3 WorldToScreen(Vector3 worldPos) {
-    Vector3 screenPos(0, 0, 0);
-    CGRect bounds = [UIScreen mainScreen].bounds;
-    
-    // Fallback simple screen projection
-    screenPos.x = bounds.size.width / 2.0f;
-    screenPos.y = bounds.size.height / 2.0f;
-    screenPos.z = 1.0f;
-    return screenPos;
+Vector3 WorldToScreen(Vector3 obj, float *matrix, float screenWidth, float screenHeight) {
+    Vector3 screen(0, 0, 0);
+    if (matrix == NULL) return screen;
+
+    float w = matrix[3] * obj.x + matrix[7] * obj.y + matrix[11] * obj.z + matrix[15];
+    if (w < 0.1f) return screen;
+
+    float x = (screenWidth / 2.0f) + (matrix[0] * obj.x + matrix[4] * obj.y + matrix[8] * obj.z + matrix[12]) / w * (screenWidth / 2.0f);
+    float y = (screenHeight / 2.0f) - (matrix[1] * obj.x + matrix[5] * obj.y + matrix[9] * obj.z + matrix[13]) / w * (screenHeight / 2.0f);
+
+    screen.x = x;
+    screen.y = y;
+    screen.z = w;
+    return screen;
 }
