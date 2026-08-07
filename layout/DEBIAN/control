@@ -1,0 +1,10 @@
+Package: com.pmndev.freefire
+Name: PMNDev
+App-Name: PMNDev
+Depends: 
+Version: 1.0
+Architecture: iphoneos-arm
+Description: PMNDEV Free Fire Custom Cheat Engine
+Maintainer: PMNDev (Tris)
+Author: PMNDev (Tris)
+Section: Applications
