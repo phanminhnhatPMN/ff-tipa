@@ -14,6 +14,7 @@ PMNDev_CFLAGS += -fobjc-arc \
 -Wno-unused-variable
 
 PMNDev_FRAMEWORKS += CoreGraphics QuartzCore UIKit Foundation
+PMNDev_PRIVATE_FRAMEWORKS += BackBoardServices GraphicsServices IOKit SpringBoardServices
 
 PMNDev_CODESIGN_FLAGS += -Sent.plist
 

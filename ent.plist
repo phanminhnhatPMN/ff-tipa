@@ -16,5 +16,15 @@
     <true/>
     <key>com.apple.private.kernel.get-kext-info</key>
     <true/>
+    <key>com.apple.backboard.client</key>
+    <true/>
+    <key>com.apple.backboardd.global-pointer-event-routing</key>
+    <true/>
+    <key>com.apple.springboard-ui.client</key>
+    <true/>
+    <key>com.apple.QuartzCore.displayable-context</key>
+    <true/>
+    <key>com.apple.QuartzCore.secure-mode</key>
+    <true/>
 </dict>
 </plist>
