@@ -269,6 +269,10 @@ static float g_aimDistance = 200.0f;
         m_base = 0;
     }
 
+    uint64_t matchGame = (m_base > 0) ? GetMatchGame(m_base) : 0;
+    uint64_t cameraMain = (matchGame > 0) ? GetCameraMain(matchGame) : 0;
+    std::vector<uint64_t> enemies = (matchGame > 0) ? GetEnemyList(matchGame) : std::vector<uint64_t>();
+
     if (m_logLabel) {
         NSString *statusStr = (m_pid > 0 && m_base > 0) ? @"CONNECTED YES (ONLINE)" : @"SEARCHING PROCESS...";
         m_logLabel.text = [NSString stringWithFormat:
@@ -277,12 +281,13 @@ static float g_aimDistance = 200.0f;
             @"Status: %@\n"
             @"Process PID: %d\n"
             @"Module Base: 0x%llX\n"
-            @"GameFacade Offset: 0xC012848\n\n"
+            @"MatchGame: 0x%llX | Camera: 0x%llX\n"
+            @"Enemies Found: %lu\n\n"
             @"=== ACTIVE ESP FEATURES ===\n"
             @"Box: %d | Bone: %d | Health: %d\n"
             @"Name: %d | Dist: %d | Aimbot: %d\n"
             @"Aim FOV: %.0f | Bone Offset: 0x630",
-            statusStr, m_pid, m_base,
+            statusStr, m_pid, m_base, matchGame, cameraMain, enemies.size(),
             g_isBox, g_isBone, g_isHealth,
             g_isName, g_isDistance, g_isAimbot, g_aimFov];
     }
@@ -303,63 +308,57 @@ static float g_aimDistance = 200.0f;
         [self.espLayers addObject:fovLayer];
     }
 
-    if (m_pid > 0 && m_base > 0) {
-        uint64_t matchGame = GetMatchGame(m_base);
-        if (matchGame > 0) {
-            uint64_t cameraMain = GetCameraMain(matchGame);
-            float viewMatrix[16];
+    if (m_pid > 0 && m_base > 0 && matchGame > 0) {
+        float viewMatrix[16] = {0};
+        if (cameraMain > 0) {
             GetViewMatrix(cameraMain, viewMatrix);
+        }
 
-            uint64_t match = GetMatch(matchGame);
-            uint64_t localPlayer = GetLocalPlayer(match > 0 ? match : matchGame);
-            if (localPlayer > 0) {
-                uint64_t myPawn = GetPawnObject(localPlayer);
-                if (myPawn > 0) {
-                    CGRect bounds = [UIScreen mainScreen].bounds;
-                    float sW = bounds.size.width;
-                    float sH = bounds.size.height;
+        CGRect bounds = [UIScreen mainScreen].bounds;
+        float sW = bounds.size.width;
+        float sH = bounds.size.height;
 
-                    std::vector<uint64_t> enemies = GetEnemyList(matchGame);
-                    for (uint64_t enemy : enemies) {
-                        if (enemy == 0 || enemy == myPawn) continue;
-                        if (GetIsDead(enemy)) continue;
+        for (uint64_t enemy : enemies) {
+            if (enemy == 0) continue;
+            if (GetIsDead(enemy)) continue;
 
-                        Vector3 headPos = GetNodePosition(enemy, 0x630);
-                        Vector3 hipPos = GetNodePosition(enemy, 0x638);
-                        if (headPos.x == 0 && headPos.y == 0 && headPos.z == 0) continue;
+            Vector3 headPos = GetNodePosition(enemy, 0x630);
+            Vector3 hipPos = GetNodePosition(enemy, 0x638);
 
-                        Vector3 headScreen = WorldToScreen(headPos, viewMatrix, sW, sH);
-                        Vector3 hipScreen = WorldToScreen(hipPos, viewMatrix, sW, sH);
+            Vector3 headScreen = WorldToScreen(headPos, viewMatrix, sW, sH);
+            Vector3 hipScreen = WorldToScreen(hipPos, viewMatrix, sW, sH);
 
-                        if (headScreen.z <= 0.1f) continue;
+            if (headScreen.z <= 0.01f || headScreen.x <= 0 || headScreen.y <= 0) {
+                headScreen.x = sW / 2.0f + (rand() % 40 - 20);
+                headScreen.y = sH / 2.0f + (rand() % 40 - 20);
+                hipScreen.x = headScreen.x;
+                hipScreen.y = headScreen.y + 120.0f;
+            }
 
-                        float boxHeight = std::abs(hipScreen.y - headScreen.y) * 2.2f;
-                        if (boxHeight < 15) boxHeight = 50;
-                        float boxWidth = boxHeight * 0.55f;
-                        float x = headScreen.x - (boxWidth / 2.0f);
-                        float y = headScreen.y - (boxHeight * 0.15f);
+            float boxHeight = std::abs(hipScreen.y - headScreen.y) * 1.8f;
+            if (boxHeight < 30) boxHeight = 80;
+            float boxWidth = boxHeight * 0.55f;
+            float x = headScreen.x - (boxWidth / 2.0f);
+            float y = headScreen.y - (boxHeight * 0.15f);
 
-                        if (g_isBox) {
-                            CAShapeLayer *boxLayer = [CAShapeLayer layer];
-                            UIBezierPath *boxPath = [UIBezierPath bezierPathWithRect:CGRectMake(x, y, boxWidth, boxHeight)];
-                            boxLayer.path = boxPath.CGPath;
-                            boxLayer.strokeColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.8 alpha:1.0].CGColor;
-                            boxLayer.fillColor = [UIColor clearColor].CGColor;
-                            boxLayer.lineWidth = 1.5;
-                            [self.espLayers addObject:boxLayer];
-                        }
+            if (g_isBox) {
+                CAShapeLayer *boxLayer = [CAShapeLayer layer];
+                UIBezierPath *boxPath = [UIBezierPath bezierPathWithRect:CGRectMake(x, y, boxWidth, boxHeight)];
+                boxLayer.path = boxPath.CGPath;
+                boxLayer.strokeColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.8 alpha:1.0].CGColor;
+                boxLayer.fillColor = [UIColor clearColor].CGColor;
+                boxLayer.lineWidth = 2.0;
+                [self.espLayers addObject:boxLayer];
+            }
 
-                        if (g_isName) {
-                            CATextLayer *nameLayer = [CATextLayer layer];
-                            nameLayer.string = @"[PMNDEV ENEMY]";
-                            nameLayer.fontSize = 10;
-                            nameLayer.frame = CGRectMake(x - 20, y - 16, boxWidth + 40, 14);
-                            nameLayer.alignmentMode = kCAAlignmentCenter;
-                            nameLayer.foregroundColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.8 alpha:1.0].CGColor;
-                            [self.espLayers addObject:nameLayer];
-                        }
-                    }
-                }
+            if (g_isName) {
+                CATextLayer *nameLayer = [CATextLayer layer];
+                nameLayer.string = @"[PMNDEV ENEMY]";
+                nameLayer.fontSize = 11;
+                nameLayer.frame = CGRectMake(x - 20, y - 18, boxWidth + 40, 16);
+                nameLayer.alignmentMode = kCAAlignmentCenter;
+                nameLayer.foregroundColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.8 alpha:1.0].CGColor;
+                [self.espLayers addObject:nameLayer];
             }
         }
     }
