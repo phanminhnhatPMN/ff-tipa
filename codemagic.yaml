@@ -1,0 +1,25 @@
+workflows:
+  ios-pmndev-build:
+    name: Build PMNDev TIPA
+    instance_type: mac_mini_m1
+    max_build_duration: 15
+    environment:
+      vars:
+        THEOS: $CM_BUILD_DIR/theos
+    scripts:
+      - name: Setup Theos Toolchain
+        script: |
+          git clone --recursive https://github.com/theos/theos.git $THEOS
+          curl -LO https://github.com/theos/sdks/archive/refs/heads/master.zip
+          unzip -q master.zip
+          mkdir -p $THEOS/sdks
+          cp -R sdks-master/* $THEOS/sdks/ || true
+      - name: Build TIPA Package
+        script: |
+          make clean
+          make package FINALPACKAGE=1
+          cp packages/*.tipa $CM_BUILD_DIR/PMNDev_Clean.tipa || cp *.tipa $CM_BUILD_DIR/PMNDev_Clean.tipa || true
+    artifacts:
+      - "packages/*.tipa"
+      - "*.tipa"
+      - "PMNDev_Clean.tipa"
