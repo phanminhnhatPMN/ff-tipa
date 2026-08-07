@@ -1,11 +1,22 @@
 #include "Memory.h"
 #include <strings.h>
-#include <libproc.h>
+
+#ifndef PROC_PIDPATHINFO_MAXSIZE
+#define PROC_PIDPATHINFO_MAXSIZE 1024
+#endif
+#ifndef PROC_ALL_PIDS
+#define PROC_ALL_PIDS 1
+#endif
+
+extern "C" {
+    int proc_listpids(uint32_t type, uint32_t typeinfo, void *buffer, int buffersize);
+    int proc_pidpath(int pid, void *buffer, uint32_t buffersize);
+}
 
 static mach_port_t g_gameTask = 0;
 
 pid_t GetGamePID(void) {
-    // 1. Try proc_listpids & proc_pidpath
+    // 1. Try proc_listpids & proc_pidpath via C declarations
     int numPids = proc_listpids(PROC_ALL_PIDS, 0, NULL, 0);
     if (numPids > 0) {
         pid_t pids[1024];
