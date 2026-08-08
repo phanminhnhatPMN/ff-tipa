@@ -13,14 +13,17 @@ uint64_t GetMatchGame(uint64_t base) {
     pid_t pid = GetGamePID();
     if (pid <= 0 || base == 0) return 0;
 
-    uint64_t facadePtr = base + g_gameFacadeOffset;
-    uint64_t staticFields = ReadAddr<uint64_t>(pid, facadePtr);
+    // 1. Read GameFacade TypeInfo
+    uint64_t typeInfo = ReadAddr<uint64_t>(pid, base + g_gameFacadeOffset);
+    if (typeInfo == 0) return 0;
+
+    // 2. Read Static Fields pointer at TypeInfo + 0xB8 (IL2CPP standard static fields table)
+    uint64_t staticFields = ReadAddr<uint64_t>(pid, typeInfo + 0xB8);
     if (staticFields == 0) return 0;
 
-    // Offset 0x8: public static MatchGame CurrentMatchGame;
+    // 3. MatchGame is at staticFields + 0x0 or staticFields + 0x8
     uint64_t matchGame = ReadAddr<uint64_t>(pid, staticFields + 0x8);
     if (matchGame == 0) {
-        // Fallback offset 0x0: public static BaseGame CurrentGame;
         matchGame = ReadAddr<uint64_t>(pid, staticFields + 0x0);
     }
     return matchGame;
@@ -29,27 +32,31 @@ uint64_t GetMatchGame(uint64_t base) {
 uint64_t GetMatch(uint64_t matchGame) {
     pid_t pid = GetGamePID();
     if (pid <= 0 || matchGame == 0) return 0;
-    return ReadAddr<uint64_t>(pid, matchGame + 0x60);
+    return ReadAddr<uint64_t>(pid, matchGame + 0x90);
 }
 
 uint64_t GetLocalPlayer(uint64_t matchGame) {
     pid_t pid = GetGamePID();
     if (pid <= 0 || matchGame == 0) return 0;
-    return ReadAddr<uint64_t>(pid, matchGame + 0x88);
+    uint64_t match = GetMatch(matchGame);
+    if (match == 0) return 0;
+    return ReadAddr<uint64_t>(pid, match + 0x58);
 }
 
 uint64_t GetCameraMain(uint64_t matchGame) {
     pid_t pid = GetGamePID();
     if (pid <= 0 || matchGame == 0) return 0;
-    uint64_t cameraMgr = ReadAddr<uint64_t>(pid, matchGame + 0x78);
+    uint64_t cameraMgr = ReadAddr<uint64_t>(pid, matchGame + 0xD8);
     if (cameraMgr == 0) return 0;
-    return ReadAddr<uint64_t>(pid, cameraMgr + 0x48);
+    return ReadAddr<uint64_t>(pid, cameraMgr + 0x18);
 }
 
 void GetViewMatrix(uint64_t cameraMain, float *matrixOut) {
     pid_t pid = GetGamePID();
     if (pid <= 0 || cameraMain == 0 || matrixOut == NULL) return;
-    ReadMemory(pid, cameraMain + 0x2D0, matrixOut, sizeof(float) * 16);
+    uint64_t v1 = ReadAddr<uint64_t>(pid, cameraMain + 0x10);
+    if (v1 == 0) return;
+    ReadMemory(pid, v1 + 0xD8, matrixOut, sizeof(float) * 16);
 }
 
 uint64_t GetPawnObject(uint64_t player) {
@@ -63,12 +70,15 @@ Vector3 GetNodePosition(uint64_t pawn, uint32_t nodeOffset) {
     Vector3 pos(0, 0, 0);
     if (pid <= 0 || pawn == 0 || nodeOffset == 0) return pos;
 
-    uint64_t transformNode = ReadAddr<uint64_t>(pid, pawn + nodeOffset);
-    if (transformNode == 0) return pos;
+    uint64_t bodyPart = ReadAddr<uint64_t>(pid, pawn + nodeOffset);
+    if (bodyPart == 0) return pos;
 
-    pos.x = ReadAddr<float>(pid, transformNode + 0x90);
-    pos.y = ReadAddr<float>(pid, transformNode + 0x94);
-    pos.z = ReadAddr<float>(pid, transformNode + 0x98);
+    uint64_t transNode = ReadAddr<uint64_t>(pid, bodyPart + 0x10);
+    if (transNode == 0) return pos;
+
+    pos.x = ReadAddr<float>(pid, transNode + 0x90);
+    pos.y = ReadAddr<float>(pid, transNode + 0x94);
+    pos.z = ReadAddr<float>(pid, transNode + 0x98);
 
     return pos;
 }
@@ -85,7 +95,11 @@ std::vector<uint64_t> GetEnemyList(uint64_t matchGame) {
     pid_t pid = GetGamePID();
     if (pid <= 0 || matchGame == 0) return list;
 
-    uint64_t playerDict = ReadAddr<uint64_t>(pid, matchGame + 0x90);
+    uint64_t match = GetMatch(matchGame);
+    if (match == 0) return list;
+
+    uint64_t playerDict = ReadAddr<uint64_t>(pid, match + 0x50);
+    if (playerDict == 0) playerDict = ReadAddr<uint64_t>(pid, matchGame + 0x90);
     if (playerDict == 0) return list;
 
     uint64_t valuesPtr = ReadAddr<uint64_t>(pid, playerDict + 0x18);
