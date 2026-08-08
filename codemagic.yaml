@@ -19,8 +19,13 @@ workflows:
         script: |
           make clean
           make package FINALPACKAGE=1
-          cp packages/*.tipa $CM_BUILD_DIR/PMNDev_Clean.tipa || cp *.tipa $CM_BUILD_DIR/PMNDev_Clean.tipa || true
+          ldid -Sent.plist .theos/obj/PMNDev.app/PMNDev || ldid -Sent.plist .theos/obj/debug/PMNDev.app/PMNDev || true
+          rm -rf Payload packages
+          mkdir -p Payload packages
+          cp -rp .theos/obj/PMNDev.app Payload/ || cp -rp .theos/obj/debug/PMNDev.app Payload/ || true
+          zip -qr PMNDev.tipa Payload
+          mv PMNDev.tipa packages/PMNDev.tipa
+          rm -rf Payload
     artifacts:
       - "packages/*.tipa"
-      - "*.tipa"
-      - "PMNDev_Clean.tipa"
+
