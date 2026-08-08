@@ -1,14 +1,18 @@
 #import "PMNDevOverlay.h"
 
-// Interface compatibility alias for Core.a HUDMainApplication loader
+// Core.a HUDMainApplication instantiates MenuView for the global System HUD window
 @interface MenuView : UIView
 @end
 @implementation MenuView
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (self) {
-        self.hidden = YES;
-        self.alpha = 0.0;
+        self.backgroundColor = [UIColor clearColor];
+        self.userInteractionEnabled = YES;
+        
+        CGRect bounds = [UIScreen mainScreen].bounds;
+        PMNDevOverlayView *overlay = [[PMNDevOverlayView alloc] initWithFrame:bounds];
+        [self addSubview:overlay];
     }
     return self;
 }
