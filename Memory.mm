@@ -53,14 +53,30 @@ pid_t GetGamePID(void) {
     return foundPid;
 }
 
+static task_t g_cachedTask = MACH_PORT_NULL;
+static pid_t g_cachedPid = -1;
+
+static task_t GetTaskForPid(pid_t pid) {
+    if (pid <= 0) return MACH_PORT_NULL;
+    if (g_cachedPid == pid && g_cachedTask != MACH_PORT_NULL && MACH_PORT_VALID(g_cachedTask)) {
+        return g_cachedTask;
+    }
+    
+    task_t task = MACH_PORT_NULL;
+    kern_return_t kr = task_for_pid(mach_task_self(), pid, &task);
+    if (kr == KERN_SUCCESS && MACH_PORT_VALID(task)) {
+        g_cachedTask = task;
+        g_cachedPid = pid;
+        return task;
+    }
+    return MACH_PORT_NULL;
+}
+
 uint64_t GetGameModuleBase(pid_t pid) {
     if (pid <= 0) return 0;
 
-    task_t task = 0;
-    kern_return_t kr = task_for_pid(mach_task_self(), pid, &task);
-    if (kr != KERN_SUCCESS || task == 0) {
-        task = mach_task_self();
-    }
+    task_t task = GetTaskForPid(pid);
+    if (task == MACH_PORT_NULL) return 0;
 
     mach_vm_address_t address = 0x100000000;
     mach_vm_size_t size = 0;
@@ -88,13 +104,11 @@ uint64_t GetGameModuleBase(pid_t pid) {
 bool ReadMemory(pid_t pid, uint64_t address, void *buffer, size_t size) {
     if (pid <= 0 || address == 0 || buffer == NULL || size == 0) return false;
 
-    task_t task = 0;
-    kern_return_t kr = task_for_pid(mach_task_self(), pid, &task);
-    if (kr != KERN_SUCCESS || task == 0) {
-        task = mach_task_self();
-    }
+    task_t task = GetTaskForPid(pid);
+    if (task == MACH_PORT_NULL) return false;
 
     mach_vm_size_t outSize = 0;
-    kr = mach_vm_read_overwrite(task, (mach_vm_address_t)address, (mach_vm_size_t)size, (mach_vm_address_t)buffer, &outSize);
+    kern_return_t kr = mach_vm_read_overwrite(task, (mach_vm_address_t)address, (mach_vm_size_t)size, (mach_vm_address_t)buffer, &outSize);
     return (kr == KERN_SUCCESS && outSize == size);
 }
+
