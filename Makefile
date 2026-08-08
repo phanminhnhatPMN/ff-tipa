@@ -29,7 +29,6 @@ PMNDev_CCFLAGS += -DNOTIFY_RELOAD_HUD=\"ch.xxtou.notification.hud.reload\"
 PMNDev_CCFLAGS += -DNOTIFY_RELOAD_APP=\"ch.xxtou.notification.app.reload\"
 
 PMNDev_FRAMEWORKS += CoreGraphics QuartzCore UIKit Foundation
-PMNDev_PRIVATE_FRAMEWORKS += BackBoardServices GraphicsServices IOKit SpringBoardServices
 
 PMNDev_CODESIGN_FLAGS += -Sent.plist
 
