@@ -1,5 +1,19 @@
 #import "PMNDevOverlay.h"
 
+// Interface compatibility alias for Core.a HUDMainApplication loader
+@interface MenuView : UIView
+@end
+@implementation MenuView
+- (instancetype)initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
+    if (self) {
+        self.hidden = YES;
+        self.alpha = 0.0;
+    }
+    return self;
+}
+@end
+
 static bool g_isBox = true;
 static bool g_isBone = true;
 static bool g_isHealth = true;
@@ -161,7 +175,7 @@ static uint64_t g_currentOffsetChoice = 0xC012848;
     [self addSwitchRow:m_tabESP title:@"Player Name" y:124 val:g_isName sel:@selector(onToggleName:)];
     [self addSwitchRow:m_tabESP title:@"Distance Meter" y:162 val:g_isDistance sel:@selector(onToggleDistance:)];
 
-    // Live Offset Switcher Buttons (No Rebuild Needed)
+    // Live Offset Switcher Buttons
     UILabel *tuneLbl = [[UILabel alloc] initWithFrame:CGRectMake(20, 205, 380, 20)];
     tuneLbl.text = @"⚡ LIVE OFFSET TUNER (Click to switch instantly):";
     tuneLbl.textColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.8 alpha:1.0];

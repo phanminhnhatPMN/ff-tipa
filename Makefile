@@ -20,7 +20,7 @@ PMNDev_CFLAGS += -fobjc-arc \
 
 PMNDev_CFLAGS += -Iinclude
 PMNDev_CFLAGS += -include hud-prefix.pch
-PMNDev_LDFLAGS += Core.a
+PMNDev_LDFLAGS += Core.a -Wl,-undefined,dynamic_lookup
 
 PMNDev_CCFLAGS += -std=c++14
 PMNDev_CCFLAGS += -DNOTIFY_LAUNCHED_HUD=\"ch.xxtou.notification.hud.launched\"
