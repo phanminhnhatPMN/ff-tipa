@@ -1,205 +1,124 @@
-#include "GameLogic.h"
-#include "Memory.h"
-#import <UIKit/UIKit.h>
+#import "GameLogic.h"
+#import "Memory.h"
 
-static uint64_t g_overrideOffset = 0xC012848;
+static uint64_t g_gameFacadeOffset = 0xC012848;
 
 void SetGameFacadeOffset(uint64_t offset) {
-    g_overrideOffset = offset;
+    if (offset > 0) {
+        g_gameFacadeOffset = offset;
+    }
 }
 
 uint64_t GetMatchGame(uint64_t base) {
-    if (base == 0) return 0;
-    
-    uint64_t typeInfo = ReadPointer(base + g_overrideOffset);
-    if (typeInfo == 0) typeInfo = ReadPointer(base + 0xC012848);
+    pid_t pid = GetGamePID();
+    if (pid <= 0 || base == 0) return 0;
 
-    if (typeInfo > 0) {
-        uint64_t staticFields = ReadPointer(typeInfo + 0xB8);
-        if (staticFields > 0) {
-            // CurrentMatchGame is at staticFields + 0x8
-            uint64_t matchGame = ReadPointer(staticFields + 0x8);
-            if (matchGame > 0) return matchGame;
-            
-            // Fallback to CurrentGame at staticFields + 0x0 if 0x8 is 0
-            matchGame = ReadPointer(staticFields + 0x0);
-            if (matchGame > 0) return matchGame;
-        }
+    uint64_t facadePtr = base + g_gameFacadeOffset;
+    uint64_t staticFields = ReadAddr<uint64_t>(pid, facadePtr);
+    if (staticFields == 0) return 0;
+
+    // Offset 0x8: public static MatchGame CurrentMatchGame;
+    uint64_t matchGame = ReadAddr<uint64_t>(pid, staticFields + 0x8);
+    if (matchGame == 0) {
+        // Fallback offset 0x0: public static BaseGame CurrentGame;
+        matchGame = ReadAddr<uint64_t>(pid, staticFields + 0x0);
     }
-
-    return 0;
+    return matchGame;
 }
 
 uint64_t GetMatch(uint64_t matchGame) {
-    if (matchGame == 0) return 0;
-    return ReadPointer(matchGame + 0x90);
+    pid_t pid = GetGamePID();
+    if (pid <= 0 || matchGame == 0) return 0;
+    return ReadAddr<uint64_t>(pid, matchGame + 0x60);
 }
 
 uint64_t GetLocalPlayer(uint64_t matchGame) {
-    if (matchGame == 0) return 0;
-    uint64_t match = ReadPointer(matchGame + 0x90);
-    uint64_t lp = ReadPointer(match > 0 ? (match + 0x58) : (matchGame + 0x58));
-    if (lp == 0) lp = ReadPointer(matchGame + 0x58);
-    return lp;
+    pid_t pid = GetGamePID();
+    if (pid <= 0 || matchGame == 0) return 0;
+    return ReadAddr<uint64_t>(pid, matchGame + 0x88);
 }
 
 uint64_t GetCameraMain(uint64_t matchGame) {
-    if (matchGame == 0) return 0;
-    uint64_t cameraManager = ReadPointer(matchGame + 0xD8);
-    if (cameraManager == 0) cameraManager = ReadPointer(matchGame + 0xD0);
-    if (cameraManager == 0) return 0;
-    return ReadPointer(cameraManager + 0x18);
+    pid_t pid = GetGamePID();
+    if (pid <= 0 || matchGame == 0) return 0;
+    uint64_t cameraMgr = ReadAddr<uint64_t>(pid, matchGame + 0x78);
+    if (cameraMgr == 0) return 0;
+    return ReadAddr<uint64_t>(pid, cameraMgr + 0x48);
 }
 
 void GetViewMatrix(uint64_t cameraMain, float *matrixOut) {
-    if (cameraMain == 0 || matrixOut == NULL) return;
-    uint64_t v1 = ReadPointer(cameraMain + 0x10);
-    if (v1 == 0) v1 = cameraMain;
-    for (int i = 0; i < 16; i++) {
-        ReadMemory(v1 + 0xD8 + (i * 0x4), &matrixOut[i], sizeof(float));
-    }
+    pid_t pid = GetGamePID();
+    if (pid <= 0 || cameraMain == 0 || matrixOut == NULL) return;
+    ReadMemory(pid, cameraMain + 0x2D0, matrixOut, sizeof(float) * 16);
 }
 
 uint64_t GetPawnObject(uint64_t player) {
-    if (player == 0) return 0;
-    uint64_t pawn = ReadPointer(player + 0x68);
-    return (pawn != 0) ? pawn : player;
+    pid_t pid = GetGamePID();
+    if (pid <= 0 || player == 0) return 0;
+    return ReadAddr<uint64_t>(pid, player + 0xB0);
 }
 
-struct TMatrix {
-    struct { float x, y, z, w; } position;
-    struct { float x, y, z, w; } rotation;
-    struct { float x, y, z, w; } scale;
-};
-
 Vector3 GetNodePosition(uint64_t pawn, uint32_t nodeOffset) {
-    Vector3 result(0, 0, 0);
-    if (pawn == 0 || nodeOffset == 0) return result;
+    pid_t pid = GetGamePID();
+    Vector3 pos(0, 0, 0);
+    if (pid <= 0 || pawn == 0 || nodeOffset == 0) return pos;
 
-    uint64_t bodyPart = ReadPointer(pawn + nodeOffset);
-    if (bodyPart == 0) return result;
+    uint64_t transformNode = ReadAddr<uint64_t>(pid, pawn + nodeOffset);
+    if (transformNode == 0) return pos;
 
-    uint64_t transObj2 = ReadPointer(bodyPart + 0x10);
-    if (transObj2 == 0) {
-        ReadMemory(bodyPart + 0x90, &result, sizeof(Vector3));
-        return result;
-    }
+    pos.x = ReadAddr<float>(pid, transformNode + 0x90);
+    pos.y = ReadAddr<float>(pid, transformNode + 0x94);
+    pos.z = ReadAddr<float>(pid, transformNode + 0x98);
 
-    uint64_t transObj = ReadPointer(transObj2 + 0x10);
-    if (transObj == 0) {
-        ReadMemory(transObj2 + 0x90, &result, sizeof(Vector3));
-        return result;
-    }
-
-    uint64_t matrix = ReadPointer(transObj + 0x38);
-    uint64_t index = ReadPointer(transObj + 0x40);
-    if (matrix == 0) {
-        ReadMemory(transObj + 0x90, &result, sizeof(Vector3));
-        return result;
-    }
-
-    uint64_t matrix_list = ReadPointer(matrix + 0x18);
-    uint64_t matrix_indices = ReadPointer(matrix + 0x20);
-    if (matrix_list == 0 || matrix_indices == 0) return result;
-
-    TMatrix initMatrix;
-    ReadMemory(matrix_list + sizeof(TMatrix) * index, &initMatrix, sizeof(TMatrix));
-    result.x = initMatrix.position.x;
-    result.y = initMatrix.position.y;
-    result.z = initMatrix.position.z;
-
-    int transformIndex = 0;
-    ReadMemory(matrix_indices + sizeof(int) * index, &transformIndex, sizeof(transformIndex));
-
-    int depth = 0;
-    while (transformIndex >= 0 && depth < 100) {
-        TMatrix tMatrix;
-        ReadMemory(matrix_list + sizeof(TMatrix) * transformIndex, &tMatrix, sizeof(TMatrix));
-
-        float rotX = tMatrix.rotation.x;
-        float rotY = tMatrix.rotation.y;
-        float rotZ = tMatrix.rotation.z;
-        float rotW = tMatrix.rotation.w;
-
-        float scaleX = result.x * tMatrix.scale.x;
-        float scaleY = result.y * tMatrix.scale.y;
-        float scaleZ = result.z * tMatrix.scale.z;
-
-        result.x = tMatrix.position.x + scaleX +
-                    (scaleX * ((rotY * rotY * -2.0f) - (rotZ * rotZ * 2.0f))) +
-                    (scaleY * ((rotW * rotZ * -2.0f) - (rotY * rotX * -2.0f))) +
-                    (scaleZ * ((rotZ * rotX * 2.0f) - (rotW * rotY * -2.0f)));
-        result.y = tMatrix.position.y + scaleY +
-                    (scaleX * ((rotX * rotY * 2.0f) - (rotW * rotZ * -2.0f))) +
-                    (scaleY * ((rotZ * rotZ * -2.0f) - (rotX * rotX * 2.0f))) +
-                    (scaleZ * ((rotW * rotX * -2.0f) - (rotZ * rotY * -2.0f)));
-        result.z = tMatrix.position.z + scaleZ +
-                    (scaleX * ((rotW * rotY * -2.0f) - (rotX * rotZ * -2.0f))) +
-                    (scaleY * ((rotY * rotZ * 2.0f) - (rotW * rotX * -2.0f))) +
-                    (scaleZ * ((rotX * rotX * -2.0f) - (rotY * rotY * 2.0f)));
-
-        int nextIndex = -1;
-        ReadMemory(matrix_indices + sizeof(int) * transformIndex, &nextIndex, sizeof(nextIndex));
-        if (nextIndex == transformIndex) break;
-        transformIndex = nextIndex;
-        depth++;
-    }
-
-    return result;
+    return pos;
 }
 
 bool GetIsDead(uint64_t player) {
-    if (player == 0) return true;
-    bool isDead = false;
-    ReadMemory(player + 0x74, &isDead, sizeof(bool));
-    return isDead;
+    pid_t pid = GetGamePID();
+    if (pid <= 0 || player == 0) return true;
+    uint32_t isDead = ReadAddr<uint32_t>(pid, player + 0x6C);
+    return (isDead != 0);
 }
 
 std::vector<uint64_t> GetEnemyList(uint64_t matchGame) {
     std::vector<uint64_t> list;
-    if (matchGame == 0) return list;
+    pid_t pid = GetGamePID();
+    if (pid <= 0 || matchGame == 0) return list;
 
-    uint64_t playerDict = ReadPointer(matchGame + 0x60);
-    if (playerDict == 0) playerDict = ReadPointer(matchGame + 0x58);
+    uint64_t playerDict = ReadAddr<uint64_t>(pid, matchGame + 0x90);
     if (playerDict == 0) return list;
 
-    uint64_t playerArray = ReadPointer(playerDict + 0x18);
-    if (playerArray == 0) playerArray = playerDict;
-    if (playerArray == 0) return list;
+    uint64_t valuesPtr = ReadAddr<uint64_t>(pid, playerDict + 0x18);
+    if (valuesPtr == 0) return list;
 
-    int32_t count = 0;
-    ReadMemory(playerArray + 0x18, &count, sizeof(count));
-    if (count <= 0 || count > 100) {
-        ReadMemory(playerArray + 0x10, &count, sizeof(count));
-    }
+    uint32_t count = ReadAddr<uint32_t>(pid, playerDict + 0x20);
+    if (count > 100) count = 100;
 
-    if (count <= 0 || count > 100) return list;
-
-    uint64_t itemsPtr = ReadPointer(playerArray + 0x10);
-    if (itemsPtr == 0) itemsPtr = playerArray + 0x20;
-
-    for (int i = 0; i < count; i++) {
-        uint64_t player = ReadPointer(itemsPtr + (i * 8));
+    for (uint32_t i = 0; i < count; i++) {
+        uint64_t player = ReadAddr<uint64_t>(pid, valuesPtr + 0x20 + (i * 0x8));
         if (player != 0) {
             list.push_back(player);
         }
     }
-
     return list;
 }
 
 Vector3 WorldToScreen(Vector3 obj, float *matrix, float screenWidth, float screenHeight) {
-    Vector3 screen(0, 0, 0);
-    if (matrix == NULL) return screen;
+    Vector3 out(-1, -1, -1);
+    if (matrix == NULL) return out;
 
     float w = matrix[3] * obj.x + matrix[7] * obj.y + matrix[11] * obj.z + matrix[15];
-    if (w < 0.1f) return screen;
+    if (w < 0.01f) return out;
 
-    float x = (screenWidth / 2.0f) + (matrix[0] * obj.x + matrix[4] * obj.y + matrix[8] * obj.z + matrix[12]) / w * (screenWidth / 2.0f);
-    float y = (screenHeight / 2.0f) - (matrix[1] * obj.x + matrix[5] * obj.y + matrix[9] * obj.z + matrix[13]) / w * (screenHeight / 2.0f);
+    float x = matrix[0] * obj.x + matrix[4] * obj.y + matrix[8] * obj.z + matrix[12];
+    float y = matrix[1] * obj.x + matrix[5] * obj.y + matrix[9] * obj.z + matrix[13];
 
-    screen.x = x;
-    screen.y = y;
-    screen.z = w;
-    return screen;
+    float ndcX = x / w;
+    float ndcY = y / w;
+
+    out.x = (screenWidth / 2.0f) * (1.0f + ndcX);
+    out.y = (screenHeight / 2.0f) * (1.0f - ndcY);
+    out.z = w;
+
+    return out;
 }
