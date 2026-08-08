@@ -19,3 +19,10 @@ static void initializePMNDevHUDOverlay(void) {
         gPMNWindow.hidden = NO;
     });
 }
+
+int main(int argc, char * argv[]) {
+    @autoreleasepool {
+        return UIApplicationMain(argc, argv, nil, nil);
+    }
+}
+
