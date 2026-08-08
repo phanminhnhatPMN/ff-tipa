@@ -1,34 +1,21 @@
 #import <UIKit/UIKit.h>
 #import "PMNDevOverlay.h"
 
-@interface PMNAppDelegate : UIResponder <UIApplicationDelegate>
-@property (strong, nonatomic) UIWindow *window;
-@end
-
-@implementation PMNAppDelegate
-
-- (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
+// Initialize Overlay Window automatically upon HUD launch
+__attribute__((constructor))
+static void initializePMNDevHUDOverlay(void) {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        static UIWindow *gPMNWindow = nil;
         CGRect frame = [UIScreen mainScreen].bounds;
-        self.window = [[UIWindow alloc] initWithFrame:frame];
-        self.window.windowLevel = UIWindowLevelStatusBar + 2000;
-        self.window.backgroundColor = [UIColor clearColor];
-        self.window.userInteractionEnabled = YES;
+        gPMNWindow = [[UIWindow alloc] initWithFrame:frame];
+        gPMNWindow.windowLevel = UIWindowLevelStatusBar + 2000;
+        gPMNWindow.backgroundColor = [UIColor clearColor];
+        gPMNWindow.userInteractionEnabled = YES;
 
         PMNDevOverlayView *overlay = [[PMNDevOverlayView alloc] initWithFrame:frame];
         UIViewController *vc = [[UIViewController alloc] init];
         vc.view = overlay;
-        self.window.rootViewController = vc;
-        self.window.hidden = NO;
+        gPMNWindow.rootViewController = vc;
+        gPMNWindow.hidden = NO;
     });
-
-    return YES;
-}
-
-@end
-
-int main(int argc, char * argv[]) {
-    @autoreleasepool {
-        return UIApplicationMain(argc, argv, nil, NSStringFromClass([PMNAppDelegate class]));
-    }
 }
