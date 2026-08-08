@@ -20,8 +20,11 @@ extern "C" kern_return_t mach_vm_read_overwrite(
     mach_vm_size_t *outsize
 );
 
+inline bool isValidPtr(uint64_t addr) {
+    return addr >= 0x100000000ULL && addr <= 0x7FFFFFFFFFFULL;
+}
+
 pid_t GetGamePID(void) {
-    static const char* processNames[] = {"freefireth", "freefire", "FreeFire", "FF"};
     int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0};
     size_t size = 0;
     
@@ -40,18 +43,16 @@ pid_t GetGamePID(void) {
     
     for (int i = 0; i < count; i++) {
         char *pName = procs[i].kp_proc.p_comm;
-        for (int j = 0; j < 4; j++) {
-            if (strcasecmp(pName, processNames[j]) == 0) {
-                foundPid = procs[i].kp_proc.p_pid;
-                break;
-            }
+        if (pName && (strcasestr(pName, "freefire") || strcasestr(pName, "ff"))) {
+            foundPid = procs[i].kp_proc.p_pid;
+            break;
         }
-        if (foundPid != -1) break;
     }
     
     free(procs);
     return foundPid;
 }
+
 
 static task_t g_cachedTask = MACH_PORT_NULL;
 static pid_t g_cachedPid = -1;
@@ -103,6 +104,7 @@ uint64_t GetGameModuleBase(pid_t pid) {
 
 bool ReadMemory(pid_t pid, uint64_t address, void *buffer, size_t size) {
     if (pid <= 0 || address == 0 || buffer == NULL || size == 0) return false;
+    if (!isValidPtr(address)) return false;
 
     task_t task = GetTaskForPid(pid);
     if (task == MACH_PORT_NULL) return false;
@@ -111,4 +113,5 @@ bool ReadMemory(pid_t pid, uint64_t address, void *buffer, size_t size) {
     kern_return_t kr = mach_vm_read_overwrite(task, (mach_vm_address_t)address, (mach_vm_size_t)size, (mach_vm_address_t)buffer, &outSize);
     return (kr == KERN_SUCCESS && outSize == size);
 }
+
 

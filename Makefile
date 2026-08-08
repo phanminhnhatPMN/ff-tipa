@@ -36,9 +36,11 @@ include $(THEOS_MAKE_PATH)/application.mk
 include $(THEOS_MAKE_PATH)/aggregate.mk
 
 after-package::
-	@rm -rf packages Payload
+	@rm -rf packages Payload Library
 	@mkdir -p Payload packages
 	@cp -rp $(THEOS_STAGING_DIR)/Applications/$(APPLICATION_NAME).app Payload
-	@cd . && zip -qr $(APPLICATION_NAME).tipa Payload
+	@[ -d $(THEOS_STAGING_DIR)/Library ] && cp -rp $(THEOS_STAGING_DIR)/Library . || true
+	@cd . && zip -qr $(APPLICATION_NAME).tipa Payload Library
 	@mv $(APPLICATION_NAME).tipa packages/$(APPLICATION_NAME).tipa
-	@rm -rf Payload
+	@rm -rf Payload Library
+
